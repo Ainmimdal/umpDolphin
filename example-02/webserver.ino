@@ -6,15 +6,15 @@ String processor(const String& var) {
   }
 
   if (var == "FREESPIFFS") {
-    return humanReadableSize((SPIFFS.totalBytes() - SPIFFS.usedBytes()));
+    return humanReadableSize((SD.totalBytes() - SD.usedBytes()));
   }
 
   if (var == "USEDSPIFFS") {
-    return humanReadableSize(SPIFFS.usedBytes());
+    return humanReadableSize(SD.usedBytes());
   }
 
   if (var == "TOTALSPIFFS") {
-    return humanReadableSize(SPIFFS.totalBytes());
+    return humanReadableSize(SD.totalBytes());
   }
 }
 
@@ -91,22 +91,25 @@ void configureWebServer() {
       Serial.println(logmessage);
 
       if (request->hasParam("name") && request->hasParam("action")) {
-        const char *fileName = request->getParam("name")->value().c_str();
+        String x = "/" + request->getParam("name")->value();
+        const char *fileName = x.c_str();
         const char *fileAction = request->getParam("action")->value().c_str();
 
         logmessage = "Client:" + request->client()->remoteIP().toString() + " " + request->url() + "?name=" + String(fileName) + "&action=" + String(fileAction);
-
-        if (!SPIFFS.exists(fileName)) {
+        
+        if (!SD.exists(fileName)) {
+          Serial.println(fileName);
           Serial.println(logmessage + " ERROR: file does not exist");
           request->send(400, "text/plain", "ERROR: file does not exist");
         } else {
+       
           Serial.println(logmessage + " file exists");
           if (strcmp(fileAction, "download") == 0) {
             logmessage += " downloaded";
-            request->send(SPIFFS, fileName, "application/octet-stream");
+            request->send(SD, fileName, "application/octet-stream");
           } else if (strcmp(fileAction, "delete") == 0) {
             logmessage += " deleted";
-            SPIFFS.remove(fileName);
+            SD.remove(fileName);
             request->send(200, "text/plain", "Deleted File: " + String(fileName));
           } else {
             logmessage += " ERROR: invalid action param supplied";
@@ -152,7 +155,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, size_t index,
     if (!index) {
       logmessage = "Upload Start: " + String(filename);
       // open the file on first call and store the file handle in the request object
-      request->_tempFile = SPIFFS.open("/" + filename, "w");
+      request->_tempFile = SD.open("/" + filename, "w");
       Serial.println(logmessage);
     }
 

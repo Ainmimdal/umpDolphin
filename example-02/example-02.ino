@@ -10,14 +10,16 @@
 #include "webpages.h"
 #include "driver/rtc_io.h"
 #include "MS5837.h"
+#include <Ezo_i2c.h>                      // Link: https://github.com/Atlas-Scientific/Ezo_I2c_lib)
 
-
+//using default i2c pins on HUZZAH ESP32
 #define SCL 22
 #define SDA 23
+
 // Chip select for the microSD card
 #define SD_CARD_SELECT 33
-
-#define swR 34
+#define BAT A13 //bat percent pin
+#define swR 34  //switch pin
 
 #define FIRMWARE_VERSION "v0.0.1"
 
@@ -48,31 +50,57 @@ AsyncWebServer* server;     // initialise webserver
 String timestamp;
 // function defaults
 String listFiles(bool ishtml = false);
-RTC_PCF8523 rtc;
-MS5837 sensor;
+
+RTC_PCF8523 rtc;                     //adalogger rtc
+MS5837 bar30;                        //bluerobotics bar30
+//Ezo_board PH = Ezo_board(99, "PH",&Wire1);  //create a PH circuit object, who's address is 99 and name is "PH"
+//Ezo_board PH;
+bool reading_request_phase = true;        //selects our phase
+ 
+uint32_t next_poll_time = 0;              //holds the next time we receive a response, in milliseconds
+const unsigned int response_delay = 1000; //how long we wait to receive a response, in milliseconds
 
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(9600);
+ // Serial1.begin(9600);
 
   Serial.print("Firmware: ");
   Serial.println(FIRMWARE_VERSION);
 
   Serial.println("Booting ...");
-  //bluerobotics bar30
+//  pinMode(A8,INPUT_PULLUP);
+//  pinMode(A10,INPUT_PULLUP);
+  //initialize i2c
   Wire.begin();
+  Wire1.begin(A0,A1,100000); //15,27
+  //Wire1.begin(A1,A0,100000);
+ 
+ 
+  delay(1000);
+  bar30.setModel(MS5837::MS5837_30BA);  
+  // PH = Ezo_board(99, "PH", &Wire1);
+   while(!bar30.init(Wire1)){
+     Serial.println("Bar30 init failed, retrying....");
+     delay(1000);
+   }
+  //bar30.init(Wire1);
+  
+  bar30.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
 
-  sensor.setModel(MS5837::MS5837_30BA);
-  sensor.init();
+  //init rtc
+  // if (!rtc.begin()) {
+  //   Serial.println("Couldn't find RTC");
+  //   Serial.flush();
+  //   while (1) delay(10);
+  // }
+  while (!rtc.begin()) {
+        Serial.println("Couldn't find RTC. Retrying...");
+        delay(200); // Wait for a second before retrying
+    }
 
-  sensor.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
-                                //
-  if (!rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
-    while (1) delay(10);
-  }
 
-  pinMode(swR,INPUT_PULLUP);
+  pinMode(swR, INPUT_PULLUP);  //init switch
+
   // Initialize the SD card
   pinMode(SD_CARD_SELECT, OUTPUT);
   if (!SD.begin(SD_CARD_SELECT)) {
@@ -103,7 +131,7 @@ void setup() {
   recordingEvents = true;
 
   if (newfile) {
-    logfile.println("Timestamp, Pressure, Temperature, Depth");
+    logfile.println("Timestamp (yy-mm-dd h:m:s), Pressure (mbar), Temperature (deg C), Depth (m), pH");
     logfile.flush();
   }
 
@@ -184,25 +212,48 @@ void loop() {
   }
 
   DateTime now = getCurrentTime();
-  if(digitalRead(swR)==1){
-    recordingEvents=false;
+  if (digitalRead(swR) == 1) {
+    recordingEvents = false;
+  } else {
+    recordingEvents = true;
   }
+
   String dataString;
   if (recordingEvents) {
-    dataString += getTimestampString(now);
-    dataString += ",";
-    dataString += sensor.pressure();  //Celcius
-    dataString += ",";
-    dataString += sensor.temperature();  //%
-    dataString += ",";
-    dataString += sensor.depth();  //%
-    logfile.println(dataString);
-    logfile.flush();
+    if (reading_request_phase)  //if were in the phase where we ask for a reading
+    {
+      //send a read command. we use this command instead of PH.send_cmd("R");
+      //to let the library know to parse the reading
+      PH.send_read_cmd();
+
+      next_poll_time = millis() + response_delay;  //set when the response will arrive
+      reading_request_phase = false;               //switch to the receiving phase
+    } else                                         //if were in the receiving phase
+    {
+      if (millis() >= next_poll_time)  //and its time to get the response
+      {
+        //receive_reading(PH);           //get the reading from the PH circuit
+        //reading_request_phase = true;  //switch back to asking for readings
+
+        bar30.read();
+        dataString += getTimestampString(now);
+        dataString += ",";
+        dataString += bar30.pressure();  //Celcius
+        dataString += ",";
+        dataString += bar30.temperature();  //%
+        dataString += ",";
+        dataString += bar30.depth();  //%
+        dataString += ",";
+        dataString += receive_reading(PH);           //get the reading from the PH circuit
+        logfile.println(dataString);
+        logfile.flush();
+        Serial.println(dataString);  //just for debuging
+
+        reading_request_phase = true;  //switch back to asking for readings
+      }
+    }
   }
-
-
-  Serial.println(dataString);  //just for debuging
-  delay(2000);
+  //delay(2000);
 }
 
 void rebootESP(String message) {
@@ -278,5 +329,35 @@ void eventsFileName(char* buffer, DateTime aTime) {
   if (aYear > 2000) {
     aYear = aYear - 2000;
   }
-  sprintf(buffer, "/C%02d%02d%02d.csv", aYear, aTime.month(), aTime.day());
+  sprintf(buffer, "/C%02d%02d%02d%02d%02d.csv", aYear, aTime.month(), aTime.day(), aTime.hour(), aTime.minute());
+}
+
+float receive_reading(Ezo_board &Sensor)                // function to decode the reading after the read command was issued
+{
+ 
+  //Serial.print(Sensor.get_name());  // print the name of the circuit getting the reading
+  //Serial.print(": ");
+ 
+  Sensor.receive_read_cmd();                                //get the response data and put it into the [Sensor].reading variable if successful
+  float x=0;
+  switch (Sensor.get_error())                          //switch case based on what the response code is.
+  {
+    case Ezo_board::SUCCESS:
+      //Serial.println(Sensor.get_last_received_reading());               //the command was successful, print the reading
+      x = Sensor.get_last_received_reading();
+      break;
+ 
+    case Ezo_board::FAIL:
+      Serial.print("Failed ");                          //means the command has failed.
+      break;
+ 
+    case Ezo_board::NOT_READY:
+      Serial.print("Pending ");                         //the command has not yet been finished calculating.
+      break;
+ 
+    case Ezo_board::NO_DATA:
+      Serial.print("No Data ");                         //the sensor has no data to send.
+      break;
+  }
+  return x;
 }
