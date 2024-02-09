@@ -10,7 +10,7 @@
 #include "webpages.h"
 #include "driver/rtc_io.h"
 #include "MS5837.h"
-#include <Ezo_i2c.h>                      // Link: https://github.com/Atlas-Scientific/Ezo_I2c_lib)
+#include <Ezo_i2c.h>  // Link: https://github.com/Atlas-Scientific/Ezo_I2c_lib)
 
 //using default i2c pins on HUZZAH ESP32
 #define SCL 22
@@ -18,8 +18,13 @@
 
 // Chip select for the microSD card
 #define SD_CARD_SELECT 33
+<<<<<<< Updated upstream
 #define BAT 35 //bat percent pin
 #define swR 34  //switch pin
+=======
+#define VBATPIN 35  //bat percent pin
+#define swR 34   //switch pin
+>>>>>>> Stashed changes
 
 #define FIRMWARE_VERSION "v0.0.1"
 
@@ -50,15 +55,15 @@ AsyncWebServer* server;     // initialise webserver
 String timestamp;
 // function defaults
 String listFiles(bool ishtml = false);
-
-RTC_PCF8523 rtc;                     //adalogger rtc
-MS5837 bar30;                        //bluerobotics bar30
+String sensorstring = "";
+RTC_PCF8523 rtc;  //adalogger rtc
+MS5837 brSensor;  //bluerobotics brSensor
 //Ezo_board PH = Ezo_board(99, "PH",&Wire1);  //create a PH circuit object, who's address is 99 and name is "PH"
 //Ezo_board PH;
-bool reading_request_phase = true;        //selects our phase
- 
-uint32_t next_poll_time = 0;              //holds the next time we receive a response, in milliseconds
-const unsigned int response_delay = 1000; //how long we wait to receive a response, in milliseconds
+bool reading_request_phase = true;  //selects our phase
+bool sensor_string_complete = false;
+uint32_t next_poll_time = 0;               //holds the next time we receive a response, in milliseconds
+const unsigned int response_delay = 1000;  //how long we wait to receive a response, in milliseconds
 
 void setup() {
   Serial.begin(9600);
@@ -68,15 +73,20 @@ void setup() {
   Serial.println(FIRMWARE_VERSION);
 
   Serial.println("Booting ...");
-//  pinMode(A8,INPUT_PULLUP);
-//  pinMode(A10,INPUT_PULLUP);
+  //  pinMode(A8,INPUT_PULLUP);
+  //  pinMode(A10,INPUT_PULLUP);
   //initialize i2c
   Wire.begin();
+<<<<<<< Updated upstream
  // Wire1.begin(A0,A1,100000); //15,27
+=======
+  //Wire1.begin(A1,A0,100000); //15,27
+>>>>>>> Stashed changes
   //Wire1.begin(A1,A0,100000);
- 
- 
+  pinMode(VBATPIN,INPUT);
+
   delay(1000);
+<<<<<<< Updated upstream
   bar30.setModel(MS5837::MS5837_02BA);  
   // PH = Ezo_board(99, "PH", &Wire1);
    while(!bar30.init()){
@@ -86,6 +96,17 @@ void setup() {
   //bar30.init(Wire1);
   
   bar30.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
+=======
+  brSensor.setModel(MS5837::MS5837_02BA);
+  // PH = Ezo_board(99, "PH", &Wire1);
+  while (!brSensor.init()) {
+    Serial.println("bar init failed, retrying....");
+    delay(500);
+  }
+  //brSensor.init(Wire1);
+
+  brSensor.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
+>>>>>>> Stashed changes
 
   //init rtc
   // if (!rtc.begin()) {
@@ -94,9 +115,9 @@ void setup() {
   //   while (1) delay(10);
   // }
   while (!rtc.begin()) {
-        Serial.println("Couldn't find RTC. Retrying...");
-        delay(200); // Wait for a second before retrying
-    }
+    Serial.println("Couldn't find RTC. Retrying...");
+    delay(200);  // Wait for a second before retrying
+  }
 
 
   pinMode(swR, INPUT_PULLUP);  //init switch
@@ -220,11 +241,25 @@ void loop() {
 
   String dataString;
   if (recordingEvents) {
+    if (sensor_string_complete == false) {
+
+
+      if (Serial1.available() > 0)  //if we see that the Atlas Scientific product has sent a character
+      {
+        char inchar = (char)Serial1.read();  //get the char we just received
+        sensorstring += inchar;              //add the char to the var called sensorstring
+        if (inchar == '\r')                  //if the incoming character is a <CR>
+        {
+          sensor_string_complete = true;  //set the flag
+        }
+      }
+    }
+
     if (reading_request_phase)  //if were in the phase where we ask for a reading
     {
       //send a read command. we use this command instead of PH.send_cmd("R");
       //to let the library know to parse the reading
-      PH.send_read_cmd();
+      //PH.send_read_cmd();
 
       next_poll_time = millis() + response_delay;  //set when the response will arrive
       reading_request_phase = false;               //switch to the receiving phase
@@ -235,20 +270,22 @@ void loop() {
         //receive_reading(PH);           //get the reading from the PH circuit
         //reading_request_phase = true;  //switch back to asking for readings
 
-        bar30.read();
+        brSensor.read();
         dataString += getTimestampString(now);
         dataString += ",";
-        dataString += bar30.pressure();  //Celcius
+        dataString += brSensor.pressure();  //Celcius
         dataString += ",";
-        dataString += bar30.temperature();  //%
+        dataString += brSensor.temperature();  //%
         dataString += ",";
-        dataString += bar30.depth();  //%
+        dataString += brSensor.depth();  //%
         dataString += ",";
-        dataString += receive_reading(PH);           //get the reading from the PH circuit
-        logfile.println(dataString);
+        dataString += sensorstring;
+        //dataString += receive_reading(PH);           //get the reading from the PH circuit
+        logfile.print(dataString);
         logfile.flush();
         Serial.println(dataString);  //just for debuging
-
+        sensorstring = "";
+        sensor_string_complete = false;
         reading_request_phase = true;  //switch back to asking for readings
       }
     }
@@ -332,32 +369,43 @@ void eventsFileName(char* buffer, DateTime aTime) {
   sprintf(buffer, "/C%02d%02d%02d%02d%02d.csv", aYear, aTime.month(), aTime.day(), aTime.hour(), aTime.minute());
 }
 
-float receive_reading(Ezo_board &Sensor)                // function to decode the reading after the read command was issued
+float receive_reading(Ezo_board& Sensor)  // function to decode the reading after the read command was issued
 {
- 
+
   //Serial.print(Sensor.get_name());  // print the name of the circuit getting the reading
   //Serial.print(": ");
- 
-  Sensor.receive_read_cmd();                                //get the response data and put it into the [Sensor].reading variable if successful
-  float x=0;
-  switch (Sensor.get_error())                          //switch case based on what the response code is.
+
+  Sensor.receive_read_cmd();  //get the response data and put it into the [Sensor].reading variable if successful
+  float x = 0;
+  switch (Sensor.get_error())  //switch case based on what the response code is.
   {
     case Ezo_board::SUCCESS:
       //Serial.println(Sensor.get_last_received_reading());               //the command was successful, print the reading
       x = Sensor.get_last_received_reading();
       break;
- 
+
     case Ezo_board::FAIL:
-      Serial.print("Failed ");                          //means the command has failed.
+      Serial.print("Failed ");  //means the command has failed.
       break;
- 
+
     case Ezo_board::NOT_READY:
-      Serial.print("Pending ");                         //the command has not yet been finished calculating.
+      Serial.print("Pending ");  //the command has not yet been finished calculating.
       break;
- 
+
     case Ezo_board::NO_DATA:
-      Serial.print("No Data ");                         //the sensor has no data to send.
+      Serial.print("No Data ");  //the sensor has no data to send.
       break;
   }
   return x;
+}
+
+String readBattery() {
+  // float measuredvbat = analogRead(VBATPIN);
+  // measuredvbat *= 2;     // we divided by 2, so multiply back
+  // measuredvbat *= 3.3;   // Multiply by 3.3V, our reference voltage
+  // measuredvbat /= 1024;  // convert to voltage
+  int rawValue = analogRead(VBATPIN);
+  float voltageLevel = (rawValue / 4095.0) * 2 * 1.1 * 3.3; // calculate voltage level
+  float batteryFraction = (voltageLevel / 4.2) * 100;
+  return String(String(batteryFraction) + "%");
 }

@@ -68,10 +68,12 @@ const char index_html[] PROGMEM = R"rawliteral(
   </style>
 </head>
 <body>
+  
   <h1>UMP Dolphin</h1>
   <p>Main page</p>
   <p>Firmware: %FIRMWARE%</p>
   <p>Free Storage: <span id="freespiffs">%FREESPIFFS%</span> | Used Storage: <span id="usedspiffs">%USEDSPIFFS%</span> | Total Storage: <span id="totalspiffs">%TOTALSPIFFS%</span></p>
+  <p>Battery: <span id="battery">%BATTERY%</span></p>
   <p>
     <button onclick="logoutButton()">Logout</button>
     <button onclick="rebootButton()">Reboot</button>
