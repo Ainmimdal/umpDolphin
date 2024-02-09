@@ -18,7 +18,7 @@
 
 // Chip select for the microSD card
 #define SD_CARD_SELECT 33
-#define BAT A13 //bat percent pin
+#define BAT 35 //bat percent pin
 #define swR 34  //switch pin
 
 #define FIRMWARE_VERSION "v0.0.1"
@@ -62,7 +62,7 @@ const unsigned int response_delay = 1000; //how long we wait to receive a respon
 
 void setup() {
   Serial.begin(9600);
- // Serial1.begin(9600);
+  Serial1.begin(9600);
 
   Serial.print("Firmware: ");
   Serial.println(FIRMWARE_VERSION);
@@ -72,14 +72,14 @@ void setup() {
 //  pinMode(A10,INPUT_PULLUP);
   //initialize i2c
   Wire.begin();
-  Wire1.begin(A0,A1,100000); //15,27
+ // Wire1.begin(A0,A1,100000); //15,27
   //Wire1.begin(A1,A0,100000);
  
  
   delay(1000);
-  bar30.setModel(MS5837::MS5837_30BA);  
+  bar30.setModel(MS5837::MS5837_02BA);  
   // PH = Ezo_board(99, "PH", &Wire1);
-   while(!bar30.init(Wire1)){
+   while(!bar30.init()){
      Serial.println("Bar30 init failed, retrying....");
      delay(1000);
    }
