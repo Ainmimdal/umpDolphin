@@ -68,12 +68,11 @@ const char index_html[] PROGMEM = R"rawliteral(
   </style>
 </head>
 <body>
-  
-  <h1>UMP Dolphin</h1>
+  <img src="umpsa">
   <p>Main page</p>
+  <p>Battery: %BATTERY%</p>
   <p>Firmware: %FIRMWARE%</p>
   <p>Free Storage: <span id="freespiffs">%FREESPIFFS%</span> | Used Storage: <span id="usedspiffs">%USEDSPIFFS%</span> | Total Storage: <span id="totalspiffs">%TOTALSPIFFS%</span></p>
-  <p>Battery: <span id="battery">%BATTERY%</span></p>
   <p>
     <button onclick="logoutButton()">Logout</button>
     <button onclick="rebootButton()">Reboot</button>
@@ -108,7 +107,6 @@ const char index_html[] PROGMEM = R"rawliteral(
       document.getElementById("detailsheader").innerHTML = "<h3>Files</h3>";
       document.getElementById("details").innerHTML = xmlhttp.responseText;
     }
-
     function downloadDeleteButton(filename, action) {
       var urltocall = "/file?name=" + filename + "&action=" + action;
       var xmlhttp = new XMLHttpRequest();

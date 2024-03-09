@@ -9,10 +9,6 @@ String processor(const String& var) {
     return humanReadableSize((SD.totalBytes() - SD.usedBytes()));
   }
 
-  if (var == "BATTERY") {
-    return readBattery().c_str();
-  }
-
   if (var == "USEDSPIFFS") {
     return humanReadableSize(SD.usedBytes());
   }
@@ -20,6 +16,10 @@ String processor(const String& var) {
   if (var == "TOTALSPIFFS") {
     return humanReadableSize(SD.totalBytes());
   }
+  if(var == "BATTERY"){
+    return readBattery();
+  }
+  return String();
 }
 
 void configureWebServer() {
@@ -36,10 +36,6 @@ void configureWebServer() {
     request->requestAuthentication();
     request->send(401);
   });
-
-   server->on("/umpsa", HTTP_GET, [](AsyncWebServerRequest *request){
-     request->send(SPIFFS, "/umpsa.png", "image/png");
-   });
 
   // presents a "you are now logged out webpage
   server->on("/logged-out", HTTP_GET, [](AsyncWebServerRequest * request) {
@@ -62,6 +58,13 @@ void configureWebServer() {
     }
 
   });
+
+
+  server->on("/umpsa",HTTP_GET,[](AsyncWebServerRequest * request){
+    request->send(SPIFFS,"/umpsa.png","image/png");
+  });
+  
+
 
   server->on("/reboot", HTTP_GET, [](AsyncWebServerRequest * request) {
     String logmessage = "Client:" + request->client()->remoteIP().toString() + " " + request->url();
@@ -134,10 +137,6 @@ void configureWebServer() {
       return request->requestAuthentication();
     }
   });
-
-  server->on("/temperature", HTTP_GET, [](AsyncWebServerRequest *request){
-  request->send_P(200, "text/plain", readBattery().c_str());
-});
 }
 
 void notFound(AsyncWebServerRequest *request) {

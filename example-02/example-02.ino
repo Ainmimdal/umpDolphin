@@ -7,10 +7,12 @@
 #include <SPI.h>
 #include <SD.h>
 #include "fs.h"
+#include "FS.h"
 #include "webpages.h"
 #include "driver/rtc_io.h"
 #include "MS5837.h"
 #include <Ezo_i2c.h>  // Link: https://github.com/Atlas-Scientific/Ezo_I2c_lib)
+#include <ESPmDNS.h>
 
 //using default i2c pins on HUZZAH ESP32
 #define SCL 22
@@ -18,13 +20,10 @@
 
 // Chip select for the microSD card
 #define SD_CARD_SELECT 33
-<<<<<<< Updated upstream
-#define BAT 35 //bat percent pin
-#define swR 34  //switch pin
-=======
+
 #define VBATPIN 35  //bat percent pin
 #define swR 34   //switch pin
->>>>>>> Stashed changes
+
 
 #define FIRMWARE_VERSION "v0.0.1"
 
@@ -70,33 +69,18 @@ void setup() {
   Serial1.begin(9600);
 
   Serial.print("Firmware: ");
-  Serial.println(FIRMWARE_VERSION);
 
   Serial.println("Booting ...");
   //  pinMode(A8,INPUT_PULLUP);
   //  pinMode(A10,INPUT_PULLUP);
   //initialize i2c
   Wire.begin();
-<<<<<<< Updated upstream
- // Wire1.begin(A0,A1,100000); //15,27
-=======
-  //Wire1.begin(A1,A0,100000); //15,27
->>>>>>> Stashed changes
+
   //Wire1.begin(A1,A0,100000);
   pinMode(VBATPIN,INPUT);
 
   delay(1000);
-<<<<<<< Updated upstream
-  bar30.setModel(MS5837::MS5837_02BA);  
-  // PH = Ezo_board(99, "PH", &Wire1);
-   while(!bar30.init()){
-     Serial.println("Bar30 init failed, retrying....");
-     delay(1000);
-   }
-  //bar30.init(Wire1);
-  
-  bar30.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
-=======
+
   brSensor.setModel(MS5837::MS5837_02BA);
   // PH = Ezo_board(99, "PH", &Wire1);
   while (!brSensor.init()) {
@@ -106,7 +90,6 @@ void setup() {
   //brSensor.init(Wire1);
 
   brSensor.setFluidDensity(997);  // kg/m^3 (997 freshwater, 1029 for seawater)
->>>>>>> Stashed changes
 
   //init rtc
   // if (!rtc.begin()) {
@@ -156,13 +139,13 @@ void setup() {
     logfile.flush();
   }
 
-  // Serial.println("Mounting SPIFFS ...");
-  // if (!SPIFFS.begin(true)) {
-  //   // if you have not used SPIFFS before on a ESP32, it will show this error.
-  //   // after a reboot SPIFFS will be configured and will happily work.
-  //   Serial.println("ERROR: Cannot mount SPIFFS, Rebooting");
-  //   rebootESP("ERROR: Cannot mount SPIFFS, Rebooting");
-  // }
+  Serial.println("Mounting SPIFFS ...");
+  if (!SPIFFS.begin(true)) {
+    // if you have not used SPIFFS before on a ESP32, it will show this error.
+    // after a reboot SPIFFS will be configured and will happily work.
+    Serial.println("ERROR: Cannot mount SPIFFS, Rebooting");
+    rebootESP("ERROR: Cannot mount SPIFFS, Rebooting");
+  }
 
   // // Serial.print("SPIFFS Free: "); Serial.println(humanReadableSize((SD.totalBytes() - SPIFFS.usedBytes())));
   // // Serial.print("SPIFFS Used: "); Serial.println(humanReadableSize(SPIFFS.usedBytes()));
@@ -216,6 +199,14 @@ void setup() {
   Serial.println(WiFi.dnsIP(2));
   Serial.println();
 
+  // Initialize mDNS
+  if (!MDNS.begin("esp32")) {   // Set the hostname to "esp32.local"
+    // Serial.println("Error setting up MDNS responder!");
+    // while(1) {
+    //   delay(1000);
+    // }
+  }
+  Serial.println("mDNS responder started");
   // configure web server
   Serial.println("Configuring Webserver ...");
   server = new AsyncWebServer(config.webserverporthttp);
@@ -224,6 +215,7 @@ void setup() {
   // startup web server
   Serial.println("Starting Webserver ...");
   server->begin();
+  //delay(2000);
 }
 
 void loop() {
@@ -250,7 +242,9 @@ void loop() {
         sensorstring += inchar;              //add the char to the var called sensorstring
         if (inchar == '\r')                  //if the incoming character is a <CR>
         {
-          sensor_string_complete = true;  //set the flag
+          if (!sensorstring.endsWith("*RS") && !sensorstring.endsWith("*RE")){
+            sensor_string_complete = true;  //set the flag
+          }
         }
       }
     }
@@ -407,5 +401,5 @@ String readBattery() {
   int rawValue = analogRead(VBATPIN);
   float voltageLevel = (rawValue / 4095.0) * 2 * 1.1 * 3.3; // calculate voltage level
   float batteryFraction = (voltageLevel / 4.2) * 100;
-  return String(String(batteryFraction) + "%");
+  return String((int)batteryFraction) + "&#37;";
 }
